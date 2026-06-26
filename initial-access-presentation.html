@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Initial Access &amp; Lateral Movement — SOC Demo Day</title>
+<style>
+  :root{
+    --bg:#0a0e17;
+    --panel:#111726;
+    --panel-2:#0d131f;
+    --ink:#e8edf6;
+    --muted:#9aa6bd;
+    --line:#1f2a3d;
+    --red:#ff5d6c;
+    --red-soft:#3a1620;
+    --blue:#43b7ff;
+    --blue-soft:#0f2538;
+    --cyan:#3ee6c4;
+    --amber:#ffc061;
+    --violet:#b08bff;
+    --accent:var(--blue);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Segoe UI",Inter,system-ui,-apple-system,sans-serif;
+    background:radial-gradient(1200px 700px at 80% -10%, #16243a 0%, var(--bg) 55%);
+    color:var(--ink);
+    overflow:hidden;
+  }
+  .deck{height:100vh;width:100vw;position:relative}
+  .slide{
+    position:absolute;inset:0;
+    display:none;
+    flex-direction:column;
+    padding:64px 84px 92px;
+    animation:fade .45s ease;
+  }
+  .slide.active{display:flex}
+  @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+  .kicker{
+    font-size:14px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--accent);font-weight:700;margin-bottom:14px;
+    display:flex;align-items:center;gap:12px;
+  }
+  .kicker::before{content:"";width:34px;height:2px;background:var(--accent);display:inline-block}
+  h1{font-size:58px;line-height:1.05;font-weight:800;letter-spacing:-.02em}
+  h2{font-size:40px;line-height:1.1;font-weight:800;letter-spacing:-.01em;margin-bottom:8px}
+  .sub{font-size:20px;color:var(--muted);margin-top:18px;max-width:60ch;line-height:1.5}
+  p.lead{font-size:21px;line-height:1.6;color:var(--ink);max-width:74ch}
+  .body{flex:1;display:flex;flex-direction:column;justify-content:center;gap:22px}
+
+  .footer{
+    position:absolute;left:0;right:0;bottom:0;height:56px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 84px;border-top:1px solid var(--line);
+    background:linear-gradient(180deg,transparent,rgba(0,0,0,.25));
+    font-size:13px;color:var(--muted);letter-spacing:.04em;
+  }
+  .footer .brand{font-weight:700;color:var(--ink)}
+  .footer .brand span{color:var(--accent)}
+
+  .progress{position:absolute;top:0;left:0;height:3px;background:var(--accent);transition:width .35s ease;z-index:5}
+
+  /* cards */
+  .grid{display:grid;gap:18px}
+  .grid.cols-2{grid-template-columns:1fr 1fr}
+  .grid.cols-3{grid-template-columns:repeat(3,1fr)}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:22px 24px;position:relative;overflow:hidden;
+  }
+  .card .tag{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:8px}
+  .card h3{font-size:21px;margin-bottom:8px;font-weight:700}
+  .card p{font-size:15.5px;line-height:1.55;color:var(--muted)}
+  .card .accent{height:3px;width:40px;border-radius:3px;background:var(--accent);margin-bottom:14px}
+  .card.red{border-color:#3a2230}.card.red .accent{background:var(--red)}.card.red h3{color:var(--red)}
+  .card.blue .accent{background:var(--blue)}.card.blue h3{color:var(--blue)}
+  .card.cyan .accent{background:var(--cyan)}.card.cyan h3{color:var(--cyan)}
+  .card.amber .accent{background:var(--amber)}.card.amber h3{color:var(--amber)}
+  .card.violet .accent{background:var(--violet)}.card.violet h3{color:var(--violet)}
+
+  /* numbered steps */
+  .steps{display:flex;flex-direction:column;gap:14px}
+  .step{display:flex;gap:18px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+  .step .num{flex:0 0 auto;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:18px;background:var(--blue-soft);color:var(--blue);border:1px solid #1c3a52}
+  .step.red .num{background:var(--red-soft);color:var(--red);border-color:#4a2030}
+  .step .txt h4{font-size:18px;margin-bottom:3px}
+  .step .txt p{font-size:15px;color:var(--muted);line-height:1.5}
+
+  /* agenda list */
+  .agenda{display:grid;grid-template-columns:1fr 1fr;gap:16px 40px;margin-top:6px}
+  .agenda .item{display:flex;gap:16px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+  .agenda .idx{font-size:26px;font-weight:800;color:var(--accent);width:46px;font-variant-numeric:tabular-nums}
+  .agenda .item h4{font-size:18px}
+  .agenda .item p{font-size:14px;color:var(--muted);margin-top:2px}
+
+  /* lab diagram */
+  .lab{display:flex;align-items:center;justify-content:center;gap:30px;flex-wrap:wrap;margin-top:10px}
+  .node{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 26px;text-align:center;min-width:210px}
+  .node .ico{font-size:30px;margin-bottom:8px}
+  .node .role{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .node .name{font-size:20px;font-weight:700;margin:6px 0 4px}
+  .node .ip{font-family:"Consolas",monospace;font-size:16px;color:var(--cyan)}
+  .node.attacker{border-color:#3a2230}.node.attacker .ip{color:var(--red)}
+  .arrow{font-size:28px;color:var(--muted)}
+
+  /* compare table */
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .compare .col{padding:24px 26px}
+  .compare .col:first-child{border-right:1px solid var(--line);background:linear-gradient(180deg,var(--red-soft),transparent)}
+  .compare .col:last-child{background:linear-gradient(180deg,var(--blue-soft),transparent)}
+  .compare h3{font-size:22px;margin-bottom:4px}
+  .compare .col:first-child h3{color:var(--red)}
+  .compare .col:last-child h3{color:var(--blue)}
+  .compare .meta{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:16px}
+  .compare ul{list-style:none;display:flex;flex-direction:column;gap:12px}
+  .compare li{font-size:16px;line-height:1.45;padding-left:24px;position:relative;color:var(--ink)}
+  .compare li::before{content:"\203A";position:absolute;left:6px;color:var(--accent);font-weight:800}
+  .compare .col:first-child li::before{color:var(--red)}
+
+  .quote{
+    font-size:30px;line-height:1.4;font-weight:600;max-width:24ch;
+    border-left:4px solid var(--accent);padding-left:28px;color:var(--ink);
+  }
+  .quote .hi{color:var(--accent)}
+  .metricrow{display:flex;gap:50px;margin-top:34px}
+  .metric .big{font-size:52px;font-weight:800;color:var(--accent);line-height:1}
+  .metric .lbl{font-size:15px;color:var(--muted);margin-top:6px}
+
+  .pill{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:5px 12px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+  .pill.red{color:var(--red);border-color:#4a2030}
+  .pill.blue{color:var(--blue);border-color:#1c3a52}
+
+  /* nav */
+  .nav{position:absolute;bottom:14px;right:84px;display:flex;gap:8px;z-index:6}
+  .nav button{width:38px;height:38px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:16px;cursor:pointer;transition:.15s}
+  .nav button:hover{border-color:var(--accent);color:var(--accent)}
+  .counter{position:absolute;bottom:18px;left:84px;font-size:13px;color:var(--muted);z-index:6;font-variant-numeric:tabular-nums}
+  .hint{position:absolute;top:18px;right:24px;font-size:11px;color:#56627a;z-index:6}
+
+  .title-wrap{flex:1;display:flex;flex-direction:column;justify-content:center}
+  .badges{display:flex;gap:10px;margin-top:30px}
+  .flow{display:flex;align-items:stretch;gap:0;margin-top:10px;flex-wrap:wrap}
+  .flow .fnode{flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);padding:16px 18px;border-radius:12px;text-align:center;margin:6px}
+  .flow .fnode .n{font-size:12px;color:var(--accent);font-weight:800;letter-spacing:.1em}
+  .flow .fnode h4{font-size:16px;margin:6px 0 4px}
+  .flow .fnode p{font-size:13px;color:var(--muted);line-height:1.4}
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <div class="progress" id="progress"></div>
+
+  <!-- 1 TITLE -->
+  <section class="slide active">
+    <div class="title-wrap">
+      <div class="kicker">SOC Demo Day &middot; Red Team &rarr; Blue Team</div>
+      <h1>Initial Access &amp;<br>Lateral Movement</h1>
+      <p class="sub">How attackers breach the perimeter — and how a modern SOC detects them. A live walkthrough of four real-world initial-access vectors, ending in Domain Admin, then caught with Wazuh &amp; QRadar.</p>
+      <div class="badges">
+        <span class="pill red">Offense: 4 Vectors</span>
+        <span class="pill blue">Defense: Wazuh + QRadar</span>
+        <span class="pill">MITRE ATT&amp;CK Aligned</span>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Initial Access &amp; Lateral Movement</span></div>
+  </section>
+
+  <!-- 2 AGENDA -->
+  <section class="slide">
+    <div class="kicker">What we'll cover</div>
+    <h2>Today's Walkthrough</h2>
+    <div class="body">
+      <div class="agenda">
+        <div class="item"><div class="idx">A</div><div><h4>Defensive Reconnaissance</h4><p>What an attacker sees at our perimeter</p></div></div>
+        <div class="item"><div class="idx">B</div><div><h4>RDP Brute Force</h4><p>The Initial Access Broker (IAB) vector</p></div></div>
+        <div class="item"><div class="idx">C</div><div><h4>Credential Stuffing</h4><p>The Infostealer vector</p></div></div>
+        <div class="item"><div class="idx">3</div><div><h4>Phishing &amp; C2</h4><p>Malicious macro &rarr; backdoor</p></div></div>
+        <div class="item"><div class="idx">1</div><div><h4>The Web Shell Pivot</h4><p>Edge device &rarr; Domain Controller</p></div></div>
+        <div class="item"><div class="idx">&starf;</div><div><h4>Blue Team Detection</h4><p>Catching it with Wazuh &amp; QRadar</p></div></div>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Agenda</span></div>
+  </section>
+
+  <!-- 3 LAB -->
+  <section class="slide">
+    <div class="kicker">The Battlefield</div>
+    <h2>The Lab Environment</h2>
+    <p class="sub">A miniature enterprise: one attacker box facing an internet-exposed web server, which sits in front of the crown jewel — the Domain Controller.</p>
+    <div class="body">
+      <div class="lab">
+        <div class="node attacker">
+          <div class="ico">&#129701;</div>
+          <div class="role">Attacker</div>
+          <div class="name">Kali Linux</div>
+          <div class="ip">10.10.10.216</div>
+        </div>
+        <div class="arrow">&#10145;</div>
+        <div class="node">
+          <div class="ico">&#127760;</div>
+          <div class="role">Target 1 &middot; Edge</div>
+          <div class="name">Web Server (IIS)</div>
+          <div class="ip">10.10.10.120</div>
+        </div>
+        <div class="arrow">&#10145;</div>
+        <div class="node">
+          <div class="ico">&#127984;</div>
+          <div class="role">Target 2 &middot; Crown Jewel</div>
+          <div class="name">Domain Controller</div>
+          <div class="ip">10.10.10.100</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Lab Environment</span></div>
+  </section>
+
+  <!-- 4 PART A RECON -->
+  <section class="slide">
+    <div class="kicker">Part A</div>
+    <h2>Defensive Reconnaissance</h2>
+    <p class="sub">Before any attack, the adversary studies our perimeter from the outside — exactly the view a stranger on the internet gets of us.</p>
+    <div class="body">
+      <div class="grid cols-2">
+        <div class="card blue">
+          <div class="accent"></div>
+          <div class="tag">Step 1 &middot; Service Identification</div>
+          <h3>What doors are open?</h3>
+          <p>A service scan reveals which common entry points are exposed — Remote Desktop (RDP), and web services (HTTP/HTTPS). If RDP or an IIS web server answers from the internet, the attacker has found a way in.</p>
+        </div>
+        <div class="card blue">
+          <div class="accent"></div>
+          <div class="tag">Step 2 &middot; RDP Security Check</div>
+          <h3>How strong is the lock?</h3>
+          <p>The attacker probes RDP's encryption level. "High" suggests Network Level Authentication (NLA) is on, which slows brute-force. "Low" or "Client Compatible" signals a soft target — a prime candidate for Initial Access Brokers.</p>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Part A &middot; Reconnaissance</span></div>
+  </section>
+
+  <!-- 5 PART B IAB -->
+  <section class="slide">
+    <div class="kicker">Part B &middot; <span style="color:var(--red)">Offense</span></div>
+    <h2>RDP Brute Force — The IAB Vector</h2>
+    <p class="sub">Initial Access Brokers don't guess thousands of usernames. They lock onto one high-value account — usually <strong>Administrator</strong> — and hammer it with common passwords until something breaks.</p>
+    <div class="body">
+      <div class="steps">
+        <div class="step red"><div class="num">1</div><div class="txt"><h4>Build a focused wordlist</h4><p>A short list of the most common leaked passwords — the ones humans actually reuse.</p></div></div>
+        <div class="step red"><div class="num">2</div><div class="txt"><h4>Target a single account, slowly</h4><p>One username (Administrator), one attempt at a time. Going slow is deliberate — it stays under account-lockout thresholds that would otherwise stop the attack in the real world.</p></div></div>
+        <div class="step red"><div class="num">&starf;</div><div class="txt"><h4>The fingerprint</h4><p>Many password attempts, but always against the <strong>same single user</strong>. Remember this pattern — the Blue Team will use it.</p></div></div>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Part B &middot; RDP Brute Force</span></div>
+  </section>
+
+  <!-- 6 PART C INFOSTEALER -->
+  <section class="slide">
+    <div class="kicker">Part C &middot; <span style="color:var(--red)">Offense</span></div>
+    <h2>Credential Stuffing — The Infostealer Vector</h2>
+    <p class="sub">Infostealers like RedLine harvest millions of username:password pairs from infected browsers. Attackers buy these dumps off the dark web and spray them at login portals (RDWeb, VPN).</p>
+    <div class="body">
+      <div class="steps">
+        <div class="step red"><div class="num">1</div><div class="txt"><h4>Load a stolen combo list</h4><p>A database dump of real credentials — each line is a <strong>different user with a different password</strong>, unlike the single-user brute force.</p></div></div>
+        <div class="step red"><div class="num">2</div><div class="txt"><h4>Spray across many accounts</h4><p>Rather than one user, the attacker tests dozens of accounts at once, looking for any pair that still works.</p></div></div>
+        <div class="step red"><div class="num">&starf;</div><div class="txt"><h4>The fingerprint</h4><p>Many failed logins, but spread across <strong>many distinct usernames</strong>. This is the opposite signature of Part B.</p></div></div>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Part C &middot; Credential Stuffing</span></div>
+  </section>
+
+  <!-- 7 COMPARE -->
+  <section class="slide">
+    <div class="kicker">Two attacks, one equation</div>
+    <h2>IAB vs. Infostealer</h2>
+    <p class="sub">Both flood the logs with failures. The difference is invisible to a firewall but obvious to math: count the <em>distinct</em> usernames.</p>
+    <div class="body">
+      <div class="compare">
+        <div class="col">
+          <h3>Brute Force (IAB)</h3>
+          <div class="meta">Part B</div>
+          <ul>
+            <li>Targets <strong>one</strong> account</li>
+            <li>Many passwords, single username</li>
+            <li>Low distinct-username count</li>
+            <li>Goal: break a known admin</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h3>Credential Stuffing</h3>
+          <div class="meta">Part C</div>
+          <ul>
+            <li>Targets <strong>many</strong> accounts</li>
+            <li>Each login a new username</li>
+            <li>High distinct-username count</li>
+            <li>Goal: find any valid pair</li>
+          </ul>
+        </div>
+      </div>
+      <p class="lead" style="margin-top:18px;color:var(--muted)">The QRadar tie-in: a single query on <strong style="color:var(--cyan)">COUNT(DISTINCT username)</strong> tells the two apart instantly.</p>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>IAB vs. Infostealer</span></div>
+  </section>
+
+  <!-- 8 PHISHING -->
+  <section class="slide">
+    <div class="kicker">Module 3 &middot; <span style="color:var(--red)">Offense</span></div>
+    <h2>Phishing &amp; Command-and-Control</h2>
+    <p class="sub">A single click on a malicious document delivers a hidden backdoor. This is how most real breaches actually begin.</p>
+    <div class="body">
+      <div class="grid cols-3">
+        <div class="card red"><div class="accent"></div><div class="tag">Step 1</div><h3>Stand up C2</h3><p>The attacker launches a Command-and-Control server on Kali — a fake web service the victim will secretly call home to.</p></div>
+        <div class="card red"><div class="accent"></div><div class="tag">Step 2</div><h3>Weaponize a document</h3><p>A malicious Office macro is generated, designed to evade defenses (AMSI bypass) and dial back to the C2 channel.</p></div>
+        <div class="card red"><div class="accent"></div><div class="tag">Step 3</div><h3>"Enable Content"</h3><p>The victim opens the invoice and enables macros. An agent checks in — the attacker now has a hidden foothold inside the network.</p></div>
+      </div>
+      <p class="lead" style="color:var(--muted);margin-top:8px">"The user opened the invoice, clicked enable macros — and we have a backdoor. No exploit, no malware alert. Just a click."</p>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Module 3 &middot; Phishing &amp; C2</span></div>
+  </section>
+
+  <!-- 9 WEB SHELL OVERVIEW -->
+  <section class="slide">
+    <div class="kicker">Module 1 &middot; The Crown Jewel</div>
+    <h2>The Web Shell Pivot</h2>
+    <p class="sub">A single web-app bug bypasses every perimeter defense and chains all the way to Domain Controller compromise — using nothing but legitimate, inherited credentials.</p>
+    <div class="body">
+      <div class="grid cols-3">
+        <div class="card red"><div class="accent"></div><h3>Bypasses the firewall</h3><p>Traffic rides over normal web ports (80/443) that must stay open — so the perimeter never blinks.</p></div>
+        <div class="card red"><div class="accent"></div><h3>Bypasses antivirus</h3><p>The attacker uses built-in, trusted tools instead of malware, so signature-based AV stays silent.</p></div>
+        <div class="card red"><div class="accent"></div><h3>Inherits identity</h3><p>The web server <em>hands over</em> its service account. No password was ever cracked.</p></div>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Module 1 &middot; Web Shell Pivot</span></div>
+  </section>
+
+  <!-- 10 KILL CHAIN -->
+  <section class="slide">
+    <div class="kicker">Module 1 &middot; The Kill Chain</div>
+    <h2>From Upload to Domain Admin</h2>
+    <p class="sub">Six moves take the attacker from an unauthenticated web form to full control of the Domain Controller.</p>
+    <div class="body">
+      <div class="flow">
+        <div class="fnode"><div class="n">01</div><h4>Upload web shell</h4><p>Abuse a file-upload flaw on the HR portal, disguised as a report.</p></div>
+        <div class="fnode"><div class="n">02</div><h4>Run recon</h4><p>Discover the inherited service account and enumerate every domain user.</p></div>
+        <div class="fnode"><div class="n">03</div><h4>Drop a quieter shell</h4><p>Trade the noisy web shell for a stealthier reverse shell.</p></div>
+        <div class="fnode"><div class="n">04</div><h4>Catch the callback</h4><p>The reverse shell connects back — a fully interactive session on the web server.</p></div>
+        <div class="fnode"><div class="n">05</div><h4>Pivot with WMI</h4><p>Reuse the inherited credentials to log into the Domain Controller remotely.</p></div>
+        <div class="fnode"><div class="n">06</div><h4>Own the domain</h4><p>A prompt on the DC. The network belongs to the attacker.</p></div>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Module 1 &middot; Kill Chain</span></div>
+  </section>
+
+  <!-- 11 TRANSITION -->
+  <section class="slide" style="background:radial-gradient(900px 600px at 50% 40%, #2a1320 0%, var(--bg) 60%)">
+    <div class="kicker" style="--accent:var(--red);color:var(--red)">The hard question</div>
+    <div class="body">
+      <div class="quote" style="--accent:var(--red)">The attack took <span class="hi" style="color:var(--red)">5 minutes</span>. The attacker is now Domain Admin. AV never fired. The firewall never blocked it. So — <span class="hi" style="color:var(--red)">how do we catch this?</span></div>
+      <div class="metricrow">
+        <div class="metric"><div class="big" style="color:var(--red)">5 min</div><div class="lbl">Perimeter &rarr; Domain Admin</div></div>
+        <div class="metric"><div class="big" style="color:var(--red)">0</div><div class="lbl">Antivirus alerts</div></div>
+        <div class="metric"><div class="big" style="color:var(--red)">100%</div><div class="lbl">Legitimate credentials used</div></div>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Transition to Defense</span></div>
+  </section>
+
+  <!-- 12 BLUE TEAM -->
+  <section class="slide" style="background:radial-gradient(1000px 650px at 75% -10%, #0f2a3f 0%, var(--bg) 55%)">
+    <div class="kicker" style="--accent:var(--cyan);color:var(--cyan)">Blue Team</div>
+    <h2>How the SOC Catches It</h2>
+    <p class="sub">The firewall and AV missed it because nothing looked "malicious." Detection comes from <em>behavior</em> — watching what trusted accounts actually do.</p>
+    <div class="body">
+      <div class="grid cols-3">
+        <div class="card cyan"><div class="accent"></div><div class="tag">Wazuh &middot; Rule 110002</div><h3>Web shell calling home</h3><p>A web server process reaching out to download a payload is highly abnormal — Wazuh flags the C2 download.</p></div>
+        <div class="card cyan"><div class="accent"></div><div class="tag">Wazuh &middot; Rule 110003</div><h3>WMI lateral movement</h3><p>A service account suddenly authenticating to the Domain Controller via WMI is the signature of a pivot.</p></div>
+        <div class="card cyan"><div class="accent"></div><div class="tag">QRadar &middot; Correlation</div><h3>The math query</h3><p>One equation separates the IAB brute force from the Infostealer spray — by counting distinct usernames.</p></div>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Blue Team Detection</span></div>
+  </section>
+
+  <!-- 13 QRADAR MATH -->
+  <section class="slide" style="background:radial-gradient(1000px 650px at 75% -10%, #0f2a3f 0%, var(--bg) 55%)">
+    <div class="kicker" style="--accent:var(--cyan);color:var(--cyan)">QRadar &middot; The Math Query</div>
+    <h2>One Equation, Two Verdicts</h2>
+    <p class="sub">Both attacks generate a wall of failed logins. QRadar groups the failures by source and asks a single question.</p>
+    <div class="body">
+      <div class="compare">
+        <div class="col">
+          <h3>Few distinct usernames</h3>
+          <div class="meta">Verdict</div>
+          <ul>
+            <li>Many failures, one or two accounts</li>
+            <li>Signature of <strong>Brute Force</strong></li>
+            <li>&rarr; Initial Access Broker (Part B)</li>
+          </ul>
+        </div>
+        <div class="col">
+          <h3>Many distinct usernames</h3>
+          <div class="meta">Verdict</div>
+          <ul>
+            <li>Many failures, many accounts</li>
+            <li>Signature of <strong>Credential Stuffing</strong></li>
+            <li>&rarr; Infostealer spray (Part C)</li>
+          </ul>
+        </div>
+      </div>
+      <p class="lead" style="margin-top:18px;color:var(--cyan)">COUNT(DISTINCT username) — the single number that tells the analyst <em>which</em> attack is underway.</p>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>QRadar &middot; Math Query</span></div>
+  </section>
+
+  <!-- 14 TAKEAWAYS -->
+  <section class="slide">
+    <div class="kicker">Wrapping up</div>
+    <h2>Key Takeaways</h2>
+    <div class="body">
+      <div class="grid cols-2">
+        <div class="card amber"><div class="accent"></div><h3>Identity is the new perimeter</h3><p>Every vector — RDP, stuffing, phishing, web shell — succeeded by abusing valid credentials, not by breaking through walls.</p></div>
+        <div class="card amber"><div class="accent"></div><h3>Prevention will fail</h3><p>AV and firewalls stayed silent the whole time. Assume breach and invest in detection.</p></div>
+        <div class="card cyan"><div class="accent"></div><h3>Behavior beats signatures</h3><p>Wazuh caught the pivot by spotting abnormal <em>actions</em>, not known-bad files.</p></div>
+        <div class="card cyan"><div class="accent"></div><h3>Context turns logs into answers</h3><p>One smart QRadar query distinguished two attacks that looked identical to the firewall.</p></div>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Key Takeaways</span></div>
+  </section>
+
+  <!-- 15 CLOSE -->
+  <section class="slide" style="background:radial-gradient(900px 600px at 50% 40%, #142338 0%, var(--bg) 60%)">
+    <div class="title-wrap" style="align-items:flex-start">
+      <div class="kicker">Thank you</div>
+      <h1>Questions?</h1>
+      <p class="sub">From perimeter to Domain Admin in five minutes — and the detections that bring the attacker back into the light.</p>
+      <div class="badges">
+        <span class="pill red">Red Team</span>
+        <span class="pill blue">Blue Team</span>
+        <span class="pill">Wazuh &middot; QRadar &middot; MITRE ATT&amp;CK</span>
+      </div>
+    </div>
+    <div class="footer"><span class="brand">phanikumar <span>Incident Response (DFIR)</span></span><span>Thank you</span></div>
+  </section>
+
+  <div class="counter" id="counter">01 / 15</div>
+  <div class="nav">
+    <button id="prev" aria-label="Previous slide">&lsaquo;</button>
+    <button id="next" aria-label="Next slide">&rsaquo;</button>
+  </div>
+  <div class="hint">&larr; &rarr; / Space to navigate &middot; F for fullscreen</div>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  let i = 0;
+  const counter = document.getElementById('counter');
+  const progress = document.getElementById('progress');
+  function pad(n){return String(n).padStart(2,'0')}
+  function show(n){
+    i = Math.max(0, Math.min(slides.length-1, n));
+    slides.forEach((s,idx)=>s.classList.toggle('active', idx===i));
+    counter.textContent = pad(i+1)+' / '+pad(slides.length);
+    progress.style.width = ((i+1)/slides.length*100)+'%';
+  }
+  document.getElementById('next').onclick=function(){show(i+1)};
+  document.getElementById('prev').onclick=function(){show(i-1)};
+  document.addEventListener('keydown',function(e){
+    if(['ArrowRight','PageDown',' '].indexOf(e.key)>-1){e.preventDefault();show(i+1)}
+    else if(['ArrowLeft','PageUp'].indexOf(e.key)>-1){e.preventDefault();show(i-1)}
+    else if(e.key==='Home'){show(0)}
+    else if(e.key==='End'){show(slides.length-1)}
+    else if(e.key.toLowerCase()==='f'){
+      if(!document.fullscreenElement){document.documentElement.requestFullscreen()}
+      else{document.exitFullscreen()}
+    }
+  });
+  show(0);
+</script>
+</body>
+</html>
